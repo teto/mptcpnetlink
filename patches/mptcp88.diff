@@ -1,0 +1,68 @@
+diff --git a/include/net/mptcp.h b/include/net/mptcp.h
+index 2f0cee6..3695f84 100644
+--- a/include/net/mptcp.h
++++ b/include/net/mptcp.h
+@@ -63,6 +63,7 @@ struct mptcp_loc4 {
+ 	u8		id;
+ 	u8		low_prio:1;
+ 	struct in_addr	addr;
++	__be16		port;
+ };
+ 
+ struct mptcp_rem4 {
+@@ -311,6 +312,11 @@ struct mptcp_cb {
+ 	struct mptcp_rem4 remaddr4[MPTCP_MAX_ADDR];
+ 	u8 rem4_bits;
+ 
++	/* bitfield x-ieme bit showing modulo (x) is taken */
++	u8 used_port_modulos;
++	u8 desired_number_of_subflows;
++	/* End of hack */
++
+ 	struct mptcp_rem6 remaddr6[MPTCP_MAX_ADDR];
+ 	u8 rem6_bits;
+ 
+diff --git a/net/mptcp/mptcp_ctrl.c b/net/mptcp/mptcp_ctrl.c
+index 8fa25a5..ddf39d6 100644
+--- a/net/mptcp/mptcp_ctrl.c
++++ b/net/mptcp/mptcp_ctrl.c
+@@ -204,6 +204,7 @@ static void __mptcp_hash_insert(struct tcp_sock *meta_tp, u32 token)
+ 	meta_tp->inside_tk_table = 1;
+ }
+ 
++
+ static int mptcp_find_token(u32 token)
+ {
+ 	u32 hash = mptcp_hash_tk(token);
+@@ -320,7 +321,8 @@ struct sock *mptcp_hash_find(struct net *net, u32 token)
+ 				       tk_table) {
+ 		meta_sk = (struct sock *)meta_tp;
+ 		if (token == meta_tp->mptcp_loc_token &&
+-		    net_eq(net, sock_net(meta_sk)) &&
++		    // TODO We removed that optimiation
++		    //net_eq(net, sock_net(meta_sk)) &&
+ 		    atomic_inc_not_zero(&meta_sk->sk_refcnt))
+ 			break;
+ 		meta_sk = NULL;
+@@ -328,6 +330,8 @@ struct sock *mptcp_hash_find(struct net *net, u32 token)
+ 	rcu_read_unlock();
+ 	return meta_sk;
+ }
++EXPORT_SYMBOL(mptcp_hash_find);
++
+ 
+ void mptcp_hash_remove_bh(struct tcp_sock *meta_tp)
+ {
+diff --git a/net/mptcp/mptcp_ipv4.c b/net/mptcp/mptcp_ipv4.c
+index 8007e49..d1bd535 100644
+--- a/net/mptcp/mptcp_ipv4.c
++++ b/net/mptcp/mptcp_ipv4.c
+@@ -503,7 +503,7 @@ int mptcp_init4_subsockets(struct sock *meta_sk, const struct mptcp_loc4 *loc,
+ 	ulid_size = sizeof(struct sockaddr_in);
+ 	loc_in.sin_family = AF_INET;
+ 	rem_in.sin_family = AF_INET;
+-	loc_in.sin_port = 0;
++	loc_in.sin_port = loc->port;
+ 	if (rem->port)
+ 		rem_in.sin_port = rem->port;
+ 	else

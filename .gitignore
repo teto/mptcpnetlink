@@ -1,6 +1,7 @@
 # Object files
 *.o
 *.ko
+*.symvers
 
 # Libraries
 *.lib
@@ -16,3 +17,8 @@
 *.exe
 *.out
 *.app
+
+# misc
+*.cmd
+*.mod
+*.order
